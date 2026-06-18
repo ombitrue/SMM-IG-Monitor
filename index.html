@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Instagram Analytics Monitor</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg-primary:#09090b;
+      --bg-secondary:#111116;
+      --bg-card:#18181b;
+      --bg-card-hover:#1e1e24;
+      --border:#27272a;
+      --border-light:#3f3f46;
+      --text-primary:#fafafa;
+      --text-secondary:#a1a1aa;
+      --text-muted:#52525b;
+      --purple:#a855f7;
+      --pink:#ec4899;
+      --orange:#f97316;
+      --green:#22c55e;
+      --red:#ef4444;
+      --ig:linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045);
+    }
+    html{font-size:14px}
+    body{background:var(--bg-primary);color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;overflow-x:hidden}
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:var(--bg-secondary)}
+    ::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}
+
+    /* ── Reusable ── */
+    .ig-text{background:var(--ig);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .ig-ring{background:var(--ig);border-radius:50%;padding:2.5px;display:inline-flex}
+    .ig-ring-inner{background:var(--bg-card);border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+
+    /* ── Header ── */
+    .hdr{background:rgba(9,9,11,.88);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;padding:13px 0}
+    .hdr-inner{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .logo{display:flex;align-items:center;gap:10px}
+    .logo-ic{width:34px;height:34px;background:var(--ig);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+    .logo-txt{font-size:1.05rem;font-weight:700;letter-spacing:-.02em;white-space:nowrap}
+    .hdr-right{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+
+    /* ── Timeframe buttons ── */
+    .tf{padding:5px 13px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;font-size:.8rem;font-weight:500;transition:all .15s;white-space:nowrap}
+    .tf:hover{border-color:var(--border-light);color:var(--text-primary)}
+    .tf.on{background:linear-gradient(135deg,rgba(168,85,247,.22),rgba(236,72,153,.22));border-color:var(--purple);color:var(--text-primary)}
+    .date-in{padding:5px 11px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);font-size:.8rem;outline:none;cursor:pointer}
+    .date-in:focus{border-color:var(--purple)}
+    input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.65);cursor:pointer}
+
+    /* ── Summary strip ── */
+    .strip{background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:11px 0}
+    .strip-inner{display:flex;align-items:center;gap:28px;flex-wrap:wrap}
+    .s-item{display:flex;flex-direction:column;gap:2px}
+    .s-lbl{font-size:.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+    .s-val{font-size:1.1rem;font-weight:700}
+    .s-div{width:1px;height:30px;background:var(--border)}
+
+    /* ── Container ── */
+    .wrap{max-width:1440px;margin:0 auto;padding:0 20px}
+    .main{padding:24px 0 70px}
+
+    /* ── Top bar ── */
+    .top-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;gap:14px;flex-wrap:wrap}
+    .sec-title{font-size:.95rem;font-weight:600;color:var(--text-secondary);display:flex;align-items:center;gap:8px}
+    .sec-title span{color:var(--purple)}
+    .add-btn{display:flex;align-items:center;gap:7px;padding:8px 18px;border-radius:10px;border:none;background:var(--ig);color:#fff;font-size:.87rem;font-weight:600;cursor:pointer;transition:opacity .15s,transform .1s}
+    .add-btn:hover{opacity:.88;transform:translateY(-1px)}
+    .add-btn:active{transform:none}
+
+    /* ── Cards grid ── */
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:15px;margin-bottom:28px}
+
+    /* ── Profile card ── */
+    .card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:19px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+    .card::after{content:'';position:absolute;inset:0;border-radius:16px;padding:1px;background:var(--ig);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:0;transition:opacity .2s;pointer-events:none}
+    .card:hover{background:var(--bg-card-hover);transform:translateY(-2px);box-shadow:0 10px 36px rgba(0,0,0,.45)}
+    .card:hover::after,.card.sel::after{opacity:1}
+    .card.sel{background:var(--bg-card-hover)}
+
+    .c-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:15px}
+    .c-prof{display:flex;align-items:center;gap:11px}
+    .c-name{font-weight:700;font-size:.93rem}
+    .c-handle{color:var(--text-secondary);font-size:.78rem;margin-top:2px}
+    .c-tag{font-size:.68rem;padding:2px 7px;border-radius:20px;background:rgba(168,85,247,.14);color:var(--purple);border:1px solid rgba(168,85,247,.28);margin-top:4px;display:inline-block}
+    .badge{display:flex;align-items:center;gap:3px;font-size:.73rem;font-weight:600;padding:3px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+    .badge.up{background:rgba(34,197,94,.14);color:var(--green)}
+    .badge.dn{background:rgba(239,68,68,.14);color:var(--red)}
+    .arr{font-size:.6rem}
+
+    .c-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:13px}
+    .met{display:flex;flex-direction:column;gap:2px}
+    .met-lbl{font-size:.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em}
+    .met-val{font-size:.95rem;font-weight:700}
+    .met-er{color:var(--pink)}
+
+    /* ── Sparkline ── */
+    svg.spark{display:block;width:100%;overflow:visible}
+
+    /* ── Detail panel ── */
+    .detail{background:var(--bg-card);border:1px solid var(--border);border-radius:20px;padding:26px;margin-bottom:28px;animation:fadein .22s ease}
+    @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .d-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:12px}
+    .d-prof{display:flex;align-items:center;gap:15px}
+    .d-name{font-size:1.15rem;font-weight:700}
+    .d-handle{color:var(--text-secondary);font-size:.88rem}
+    .close-btn{width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;transition:all .15s;flex-shrink:0}
+    .close-btn:hover{background:var(--bg-card-hover);color:var(--text-primary)}
+
+    .tabs{display:flex;gap:2px;margin-bottom:22px;border-bottom:1px solid var(--border)}
+    .tab{padding:9px 17px;border:none;background:transparent;color:var(--text-muted);font-size:.83rem;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;white-space:nowrap}
+    .tab:hover{color:var(--text-primary)}
+    .tab.on{color:var(--text-primary);border-bottom-color:var(--purple)}
+
+    .d-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:14px;margin-bottom:22px}
+    .ds{background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:15px}
+    .ds-lbl{font-size:.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+    .ds-val{font-size:1.25rem;font-weight:700;background:var(--ig);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .ds-d{font-size:.73rem;margin-top:3px}
+    .dg{color:var(--green)}
+    .dr{color:var(--red)}
+
+    .chart-wrap{position:relative;height:255px;width:100%}
+
+    .posts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:11px}
+    .post{background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:13px}
+    .post-type{font-size:.7rem;color:var(--text-muted);margin-bottom:8px;display:flex;align-items:center;gap:5px}
+    .post-row{display:flex;justify-content:space-between;margin-top:5px}
+    .post-v{font-size:.88rem;font-weight:600}
+    .post-l{font-size:.66rem;color:var(--text-muted)}
+    .post-er{font-size:.78rem;color:var(--pink);font-weight:600;margin-top:8px}
+
+    /* ── Modal ── */
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(7px);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadein .15s ease}
+    .modal{background:var(--bg-card);border:1px solid var(--border-light);border-radius:20px;padding:28px;width:100%;max-width:430px}
+    .m-title{font-size:1.08rem;font-weight:700;margin-bottom:20px;display:flex;align-items:center;gap:9px}
+    .m-ic{width:30px;height:30px;background:var(--ig);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+    .m-field{margin-bottom:15px}
+    .m-lbl{font-size:.76rem;color:var(--text-secondary);margin-bottom:5px;display:block}
+    .m-in{width:100%;padding:10px 13px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:.88rem;outline:none;transition:border-color .15s}
+    .m-in:focus{border-color:var(--purple)}
+    .m-in::placeholder{color:var(--text-muted)}
+    .m-hint{font-size:.7rem;color:var(--text-muted);margin-top:4px}
+    .m-actions{display:flex;gap:9px;margin-top:22px}
+    .btn-cancel{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);font-size:.88rem;cursor:pointer;transition:all .15s}
+    .btn-cancel:hover{background:var(--bg-secondary);color:var(--text-primary)}
+    .btn-add{flex:2;padding:10px;border-radius:10px;border:none;background:var(--ig);color:#fff;font-size:.88rem;font-weight:600;cursor:pointer;transition:opacity .15s;display:flex;align-items:center;justify-content:center;gap:7px}
+    .btn-add:hover{opacity:.88}
+    .btn-add:disabled{opacity:.45;cursor:not-allowed}
+
+    /* ── Toast ── */
+    .toast{position:fixed;bottom:22px;right:22px;background:var(--bg-card);border:1px solid var(--border-light);border-radius:12px;padding:13px 18px;font-size:.83rem;z-index:400;display:flex;align-items:center;gap:9px;box-shadow:0 8px 32px rgba(0,0,0,.55);animation:slideup .22s ease}
+    @keyframes slideup{from{transform:translateY(18px);opacity:0}to{transform:translateY(0);opacity:1}}
+    .toast-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0}
+
+    /* ── Empty state ── */
+    .empty{text-align:center;padding:64px 20px;color:var(--text-muted)}
+    .empty-ic{font-size:2.8rem;margin-bottom:11px}
+    .empty-t{font-size:.88rem;line-height:1.6}
+
+    /* ── Spinner ── */
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+
+    @media(max-width:620px){
+      .hdr-inner{flex-direction:column;align-items:flex-start}
+      .grid{grid-template-columns:1fr}
+      .d-stats{grid-template-columns:1fr 1fr}
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+/* ================================================================
+   UTILITIES
+   ================================================================ */
+const fmt = n =>
+  n >= 1_000_000 ? (n/1_000_000).toFixed(1)+"M" :
+  n >= 1_000     ? (n/1_000).toFixed(1)+"k"      : String(n);
+
+const fmtDelta = n => (n >= 0 ? "+" : "") + fmt(Math.abs(n)) + (n < 0 ? "" : "");
+
+const rnd = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
+
+/* Generate smooth trending series */
+const genSeries = (base, pts, vol = 0.014, trend = 0.003) => {
+  const out = [];
+  let v = base * (1 - trend * pts * 0.6);
+  for (let i = 0; i < pts; i++) {
+    v = Math.max(1, v * (1 + trend + (Math.random() - 0.47) * vol));
+    out.push(Math.round(v));
+  }
+  out[pts - 1] = base;
+  return out;
+};
+
+const TF = {
+  "1Д": { pts: 24, unit: "hour",  label: "1 День"   },
+  "1Н": { pts:  7, unit: "day",   label: "1 Неделя" },
+  "1М": { pts: 30, unit: "day",   label: "1 Месяц"  },
+  "1Г": { pts: 12, unit: "month", label: "1 Год"    },
+};
+
+const makeDates = (pts, unit) => {
+  const now = new Date(), out = [];
+  for (let i = pts - 1; i >= 0; i--) {
+    const d = new Date(now);
+    if (unit === "hour")  d.setHours(d.getHours() - i);
+    else if (unit === "day")   d.setDate(d.getDate() - i);
+    else if (unit === "month") d.setMonth(d.getMonth() - i);
+    out.push(d);
+  }
+  return out;
+};
+
+const dlabel = (d, unit) => {
+  if (unit === "hour")  return d.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
+  if (unit === "day")   return d.toLocaleDateString("ru-RU",{day:"numeric",month:"short"});
+  if (unit === "month") return d.toLocaleDateString("ru-RU",{month:"short",year:"2-digit"});
+};
+
+/* Extract clean handle from @name or URL */
+const parseHandle = raw => {
+  const s = raw.trim();
+  const urlMatch = s.match(/instagram\.com\/([^/?#\s]+)/i);
+  if (urlMatch) return urlMatch[1].replace(/\/$/, "");
+  return s.replace(/^@/, "").trim();
+};
+
+/* ================================================================
+   BUILD PROFILE — generates all time-series data for every TF
+   ================================================================ */
+const PALETTE = [
+  { emoji:"🌟", color:"#7c3aed" }, { emoji:"🔥", color:"#dc2626" },
+  { emoji:"💎", color:"#0891b2" }, { emoji:"🌈", color:"#059669" },
+  { emoji:"⚡", color:"#d97706" }, { emoji:"🎯", color:"#db2777" },
+  { emoji:"🚀", color:"#4f46e5" }, { emoji:"🌸", color:"#be185d" },
+];
+
+let _palIdx = 0;
+const nextPalette = () => PALETTE[_palIdx++ % PALETTE.length];
+
+const PRESET_AV = {
+  natgeo: { emoji:"🌿", color:"#16a34a" },
+  nasa:   { emoji:"🚀", color:"#2563eb" },
+  nike:   { emoji:"✓",  color:"#18181b" },
+  dior:   { emoji:"✦",  color:"#92400e" },
+};
+
+const buildProfile = ({ id, username, name, tag, followers, avgLikes, er, avatarKey = null }) => {
+  const av = avatarKey && PRESET_AV[avatarKey] ? PRESET_AV[avatarKey] : nextPalette();
+
+  const series = {};
+  Object.entries(TF).forEach(([key, { pts }]) => {
+    series[key] = {
+      followers: genSeries(followers,      pts, 0.012, 0.004),
+      likes:     genSeries(avgLikes,       pts, 0.025, 0.003),
+      comments:  genSeries(avgLikes * 0.07, pts, 0.030, 0.002),
+      er:        genSeries(er,             pts, 0.018, 0.001),
+    };
+  });
+
+  const todayDelta = followers - series["1Д"].followers[0];
+
+  const POST_TYPES = [
+    { type:"Фото",    icon:"🖼️" },
+    { type:"Видео",   icon:"🎬" },
+    { type:"Reels",   icon:"🎞️" },
+    { type:"Карусель",icon:"🗂️" },
+  ];
+  const posts = Array.from({ length: 6 }, (_, i) => ({
+    id: i,
+    ...POST_TYPES[i % 4],
+    likes:    rnd(Math.round(avgLikes * .55), Math.round(avgLikes * 1.45)),
+    comments: rnd(Math.round(avgLikes * .03), Math.round(avgLikes * .13)),
+    er:       (Math.random() * 3 + er - 0.6).toFixed(2),
+  }));
+
+  return { id, username: username.startsWith("@") ? username : "@"+username, name, tag, followers, avgLikes, er, av, series, todayDelta, posts };
+};
+
+/* ================================================================
+   INITIAL MOCK DATA
+   ================================================================ */
+const INIT = [
+  buildProfile({ id:1, username:"@natgeo", name:"National Geographic", tag:"Медиа",  followers:280_450_000, avgLikes:185_000, er:3.4, avatarKey:"natgeo" }),
+  buildProfile({ id:2, username:"@nasa",   name:"NASA",                tag:"Наука",  followers:97_800_000,  avgLikes:120_000, er:4.1, avatarKey:"nasa"   }),
+  buildProfile({ id:3, username:"@nike",   name:"Nike",                tag:"Бренд",  followers:306_000_000, avgLikes:210_000, er:2.8, avatarKey:"nike"   }),
+  buildProfile({ id:4, username:"@dior",   name:"Dior",                tag:"Мода",   followers:54_300_000,  avgLikes:75_000,  er:5.2, avatarKey:"dior"   }),
+];
+
+/* ================================================================
+   SPARKLINE
+   ================================================================ */
+const Sparkline = ({ data = [], color = "#a855f7", h = 40 }) => {
+  if (data.length < 2) return null;
+  const W = 200, H = h;
+  const min = Math.min(...data), max = Math.max(...data), rng = max - min || 1;
+  const pts = data.map((v, i) => [
+    (i / (data.length - 1)) * W,
+    H - ((v - min) / rng) * (H - 4) - 2,
+  ]);
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  const area = `${line} L${pts[pts.length-1][0].toFixed(1)},${H} L0,${H} Z`;
+  const gid  = React.useId().replace(/:/g,"");
+  return (
+    <svg className="spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{height:h}}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor={color} stopOpacity=".35"/>
+          <stop offset="100%" stopColor={color} stopOpacity=".02"/>
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gid})`}/>
+      <path d={line} fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+};
+
+/* ================================================================
+   CHART.JS LINE CHART
+   ================================================================ */
+const LineChart = React.memo(({ labels, datasets, id }) => {
+  const ref = React.useRef(null);
+  const ch  = React.useRef(null);
+  React.useEffect(() => {
+    if (!ref.current) return;
+    if (ch.current) ch.current.destroy();
+    const ctx = ref.current.getContext("2d");
+    ch.current = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: datasets.map(ds => {
+          const g = ctx.createLinearGradient(0, 0, 0, 240);
+          g.addColorStop(0, ds.color + "50");
+          g.addColorStop(1, ds.color + "00");
+          return {
+            label: ds.label,
+            data: ds.data,
+            borderColor: ds.color,
+            backgroundColor: g,
+            borderWidth: 2,
+            tension: 0.42,
+            fill: true,
+            pointRadius: labels.length > 14 ? 0 : 3,
+            pointHoverRadius: 5,
+            pointBackgroundColor: ds.color,
+          };
+        }),
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode:"index", intersect:false },
+        plugins: {
+          legend: { labels:{ color:"#a1a1aa", font:{size:11}, boxWidth:12, padding:14 } },
+          tooltip: {
+            backgroundColor:"#18181b", borderColor:"#27272a", borderWidth:1,
+            titleColor:"#fafafa", bodyColor:"#a1a1aa", padding:10,
+            callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.raw)}` },
+          },
+        },
+        scales: {
+          x: { grid:{color:"#27272a"}, ticks:{color:"#52525b",font:{size:10},maxTicksLimit:8,maxRotation:0} },
+          y: { grid:{color:"#27272a"}, ticks:{color:"#52525b",font:{size:10},callback:v=>fmt(v)} },
+        },
+      },
+    });
+    return () => { if (ch.current) ch.current.destroy(); };
+  }, [id]);
+  return <div className="chart-wrap"><canvas ref={ref}/></div>;
+});
+
+/* ================================================================
+   PROFILE CARD
+   ================================================================ */
+const Card = ({ p, tf, selected, onClick }) => {
+  const spark = (p.series[tf]?.followers || []).slice(-20);
+  const up    = p.todayDelta >= 0;
+  return (
+    <div className={`card${selected?" sel":""}`} onClick={onClick}>
+      <div className="c-head">
+        <div className="c-prof">
+          <div className="ig-ring" style={{width:52,height:52}}>
+            <div className="ig-ring-inner" style={{width:"100%",height:"100%",background:p.av.color}}>
+              <span style={{fontSize:"1.25rem"}}>{p.av.emoji}</span>
+            </div>
+          </div>
+          <div>
+            <div className="c-name">{p.name}</div>
+            <div className="c-handle">{p.username}</div>
+            {p.tag && <span className="c-tag">{p.tag}</span>}
+          </div>
+        </div>
+        <div className={`badge ${up?"up":"dn"}`}>
+          <span className="arr">{up?"▲":"▼"}</span>
+          {fmtDelta(p.todayDelta)}
+        </div>
+      </div>
+      <div className="c-metrics">
+        <div className="met"><span className="met-lbl">Подписчики</span><span className="met-val">{fmt(p.followers)}</span></div>
+        <div className="met"><span className="met-lbl">Avg. Likes</span><span className="met-val">{fmt(p.avgLikes)}</span></div>
+        <div className="met"><span className="met-lbl">ER%</span><span className={`met-val met-er`}>{p.er.toFixed(1)}%</span></div>
+      </div>
+      <Sparkline data={spark} color={up?"#a855f7":"#ef4444"} h={40}/>
+    </div>
+  );
+};
+
+/* ================================================================
+   DETAIL PANEL
+   ================================================================ */
+const Detail = ({ p, tf, onClose }) => {
+  const [tab, setTab] = React.useState(0);
+  const TABS = ["Рост подписчиков","Вовлеченность","Аналитика публикаций"];
+  const s   = p.series[tf] || p.series["1М"];
+  const cfg = TF[tf];
+  const labels = makeDates(cfg.pts, cfg.unit).map(d => dlabel(d, cfg.unit));
+
+  const charts = [
+    { labels, datasets:[{ label:"Подписчики", data:s.followers, color:"#a855f7" }] },
+    { labels, datasets:[
+        { label:"Лайки",       data:s.likes,    color:"#ec4899" },
+        { label:"Комментарии", data:s.comments, color:"#f97316" },
+      ]
+    },
+  ];
+
+  const growth    = s.followers[s.followers.length-1] - s.followers[0];
+  const growthPct = ((growth / (s.followers[0]||1))*100).toFixed(2);
+  const avgER     = (s.er.reduce((a,b)=>a+b,0)/s.er.length).toFixed(2);
+  const up        = p.todayDelta >= 0;
+
+  const statCards = [
+    { lbl:"Всего подписчиков",      val:fmt(p.followers),            delta:fmtDelta(p.todayDelta)+" сег.", up },
+    { lbl:`Прирост (${cfg.label})`, val:fmtDelta(growth),             delta:growthPct+"%",                  up:growth>=0 },
+    { lbl:"Avg. Лайки/пост",        val:fmt(p.avgLikes),              delta:null },
+    { lbl:"Средний ER%",            val:avgER+"%",                    delta:null },
+  ];
+
+  return (
+    <div className="detail">
+      <div className="d-head">
+        <div className="d-prof">
+          <div className="ig-ring" style={{width:62,height:62,padding:3}}>
+            <div className="ig-ring-inner" style={{width:"100%",height:"100%",background:p.av.color}}>
+              <span style={{fontSize:"1.55rem"}}>{p.av.emoji}</span>
+            </div>
+          </div>
+          <div>
+            <div className="d-name">{p.name}</div>
+            <div className="d-handle">{p.username}{p.tag && <span className="c-tag" style={{marginLeft:8}}>{p.tag}</span>}</div>
+          </div>
+        </div>
+        <button className="close-btn" onClick={onClose}>✕</button>
+      </div>
+
+      <div className="d-stats">
+        {statCards.map((s,i) => (
+          <div key={i} className="ds">
+            <div className="ds-lbl">{s.lbl}</div>
+            <div className="ds-val">{s.val}</div>
+            {s.delta && <div className={`ds-d ${s.up?"dg":"dr"}`}>{s.delta}</div>}
+          </div>
+        ))}
+      </div>
+
+      <div className="tabs">
+        {TABS.map((t,i)=>(
+          <button key={i} className={`tab${tab===i?" on":""}`} onClick={()=>setTab(i)}>{t}</button>
+        ))}
+      </div>
+
+      {tab < 2 && (
+        <LineChart
+          key={`${p.id}-${tab}-${tf}`}
+          labels={charts[tab].labels}
+          datasets={charts[tab].datasets}
+          id={`${p.id}-${tab}-${tf}`}
+        />
+      )}
+
+      {tab === 2 && (
+        <div className="posts-grid">
+          {p.posts.map(post => (
+            <div key={post.id} className="post">
+              <div className="post-type"><span>{post.icon}</span>{post.type}</div>
+              <div className="post-row">
+                <div><div className="post-v">{fmt(post.likes)}</div><div className="post-l">Лайки</div></div>
+                <div style={{textAlign:"right"}}><div className="post-v">{fmt(post.comments)}</div><div className="post-l">Коммент.</div></div>
+              </div>
+              <div className="post-er">ER: {post.er}%</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ================================================================
+   ADD PROFILE MODAL
+   ================================================================ */
+const AddModal = ({ onClose, onAdd }) => {
+  const [raw,  setRaw]  = React.useState("");
+  const [note, setNote] = React.useState("");
+  const [busy, setBusy] = React.useState("");   // "" | "loading" | "done" | "error"
+  const [err,  setErr]  = React.useState("");
+
+  const handle = parseHandle(raw);
+  const valid  = handle.length >= 1;
+
+  const submit = async () => {
+    if (!valid || busy === "loading") return;
+    setErr("");
+    setBusy("loading");
+
+    /* Simulate a brief async "fetch" delay */
+    await new Promise(r => setTimeout(r, 650));
+
+    try {
+      const displayName = handle.charAt(0).toUpperCase() + handle.slice(1).replace(/[._]/g," ");
+      const newProfile  = buildProfile({
+        id:        Date.now(),
+        username:  handle,
+        name:      displayName,
+        tag:       note.trim() || "Новый",
+        followers: rnd(8_000, 12_000_000),
+        avgLikes:  rnd(300,   120_000),
+        er:        +(Math.random() * 5 + 0.8).toFixed(1),
+      });
+      setBusy("done");
+      await new Promise(r => setTimeout(r, 280));
+      onAdd(newProfile);
+      onClose();
+    } catch (e) {
+      setErr("Не удалось добавить профиль. Попробуйте ещё раз.");
+      setBusy("");
+    }
+  };
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="m-title">
+          <div className="m-ic">📸</div>
+          Добавить профиль
+        </div>
+
+        <div className="m-field">
+          <label className="m-lbl">URL или @username аккаунта Instagram</label>
+          <input
+            className="m-in"
+            placeholder="@handle или instagram.com/handle"
+            value={raw}
+            onChange={e => { setRaw(e.target.value); setErr(""); }}
+            onKeyDown={e => e.key === "Enter" && submit()}
+            autoFocus
+          />
+          {raw.trim() && valid && (
+            <div className="m-hint" style={{color:"var(--purple)"}}>
+              Будет добавлен: <strong>@{handle}</strong>
+            </div>
+          )}
+          {raw.trim() && !valid && (
+            <div className="m-hint" style={{color:"var(--red)"}}>Введите корректный username</div>
+          )}
+        </div>
+
+        <div className="m-field">
+          <label className="m-lbl">Категория / Заметка <span style={{color:"var(--text-muted)"}}>(необязательно)</span></label>
+          <input
+            className="m-in"
+            placeholder="Конкурент, Партнёр, Клиент…"
+            value={note}
+            onChange={e => setNote(e.target.value)}
+          />
+        </div>
+
+        {err && (
+          <div style={{fontSize:".78rem",color:"var(--red)",marginTop:"-8px",marginBottom:"10px"}}>
+            ⚠ {err}
+          </div>
+        )}
+
+        <div className="m-actions">
+          <button className="btn-cancel" onClick={onClose}>Отмена</button>
+          <button
+            className="btn-add"
+            onClick={submit}
+            disabled={!valid || busy === "loading"}
+          >
+            {busy === "loading"
+              ? <><div className="spinner"/><span>Добавление…</span></>
+              : busy === "done"
+              ? <span>✓ Готово</span>
+              : <span>✦ Добавить</span>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ================================================================
+   TOAST NOTIFICATION
+   ================================================================ */
+const Toast = ({ msg, onHide }) => {
+  React.useEffect(() => {
+    const t = setTimeout(onHide, 3200);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className="toast">
+      <div className="toast-dot"/>
+      {msg}
+    </div>
+  );
+};
+
+/* ================================================================
+   APP
+   ================================================================ */
+const App = () => {
+  const [profiles,    setProfiles]    = React.useState(INIT);
+  const [tf,          setTf]          = React.useState("1М");
+  const [selDate,     setSelDate]     = React.useState("");
+  const [selId,       setSelId]       = React.useState(null);
+  const [showModal,   setShowModal]   = React.useState(false);
+  const [toast,       setToast]       = React.useState(null);
+
+  const addProfile = React.useCallback(p => {
+    setProfiles(prev => [p, ...prev]);
+    setToast(`Профиль ${p.username} добавлен`);
+    setSelId(p.id);
+  }, []);
+
+  const toggleSel = id => setSelId(prev => prev === id ? null : id);
+
+  const totalFollowers = profiles.reduce((a, p) => a + p.followers, 0);
+  const avgER          = profiles.length
+    ? (profiles.reduce((a, p) => a + p.er, 0) / profiles.length).toFixed(2)
+    : "0.00";
+  const selProfile     = profiles.find(p => p.id === selId) || null;
+  const today          = new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"long",year:"numeric"});
+
+  return (
+    <>
+      {/* ── Header ── */}
+      <header className="hdr">
+        <div className="wrap">
+          <div className="hdr-inner">
+            <div className="logo">
+              <div className="logo-ic">📸</div>
+              <span className="logo-txt ig-text">Instagram Analytics Monitor</span>
+            </div>
+            <div className="hdr-right">
+              <span style={{fontSize:".78rem",color:"var(--text-muted)"}}>📅</span>
+              <input
+                type="date"
+                className="date-in"
+                value={selDate}
+                onChange={e => setSelDate(e.target.value)}
+                title="Выбрать дату"
+              />
+              {Object.entries(TF).map(([key, {label}]) => (
+                <button
+                  key={key}
+                  className={`tf${tf===key?" on":""}`}
+                  onClick={() => setTf(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Summary strip ── */}
+      <div className="strip">
+        <div className="wrap">
+          <div className="strip-inner">
+            <div className="s-item">
+              <span className="s-lbl">Дата</span>
+              <span className="s-val" style={{fontSize:".85rem",color:"var(--text-secondary)"}}>{today}</span>
+            </div>
+            <div className="s-div"/>
+            <div className="s-item">
+              <span className="s-lbl">Профилей отслеживается</span>
+              <span className="s-val ig-text">{profiles.length}</span>
+            </div>
+            <div className="s-div"/>
+            <div className="s-item">
+              <span className="s-lbl">Всего подписчиков</span>
+              <span className="s-val">{fmt(totalFollowers)}</span>
+            </div>
+            <div className="s-div"/>
+            <div className="s-item">
+              <span className="s-lbl">Средний ER%</span>
+              <span className="s-val" style={{color:"var(--pink)"}}>{avgER}%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Main ── */}
+      <main className="main">
+        <div className="wrap">
+
+          {/* Top bar */}
+          <div className="top-bar">
+            <div className="sec-title">
+              <span>◈</span> Отслеживаемые аккаунты
+            </div>
+            <button className="add-btn" onClick={() => setShowModal(true)}>
+              <span style={{fontSize:"1.1rem",lineHeight:1}}>+</span>
+              Добавить профиль
+            </button>
+          </div>
+
+          {/* Detail panel */}
+          {selProfile && (
+            <Detail
+              key={selProfile.id}
+              p={selProfile}
+              tf={tf}
+              onClose={() => setSelId(null)}
+            />
+          )}
+
+          {/* Cards */}
+          {profiles.length === 0 ? (
+            <div className="empty">
+              <div className="empty-ic">📊</div>
+              <div className="empty-t">
+                Нет отслеживаемых профилей.<br/>
+                Нажмите «Добавить профиль», чтобы начать.
+              </div>
+            </div>
+          ) : (
+            <div className="grid">
+              {profiles.map(p => (
+                <Card
+                  key={p.id}
+                  p={p}
+                  tf={tf}
+                  selected={selId === p.id}
+                  onClick={() => toggleSel(p.id)}
+                />
+              ))}
+            </div>
+          )}
+
+        </div>
+      </main>
+
+      {/* Modal */}
+      {showModal && (
+        <AddModal
+          onClose={() => setShowModal(false)}
+          onAdd={addProfile}
+        />
+      )}
+
+      {/* Toast */}
+      {toast && <Toast msg={toast} onHide={() => setToast(null)}/>}
+    </>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
