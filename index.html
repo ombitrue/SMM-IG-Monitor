@@ -318,7 +318,7 @@ const PRESET_AV = {
    ================================================================ */
 const POST_TYPES = [
   { type: "Фото",     icon: "🖼️" },
-  { type: "Видео",    icon: "🎬" },
+  { type: "Video",    icon: "🎬" },
   { type: "Reels",    icon: "🎞️" },
   { type: "Карусель", icon: "🗂️" },
 ];
@@ -387,24 +387,14 @@ const INIT_PROFILES = [
   buildProfile({ id: 3, username: "@nike",   name: "Nike",                tag: "Бренд",  followers: 306_000_000, avgLikes: 210_000, er: 2.8, avatarKey: "nike"   }),
   buildProfile({ id: 4, username: "@dior",   name: "Dior",                tag: "Мода",   followers:  54_300_000, avgLikes:  75_000, er: 5.2, avatarKey: "dior"   }),
 ];
+
 /* ================================================================
-   REAL API FETCH — instagram360 on RapidAPI
+   REAL API FETCH VIA LOCAL BACKEND PROXY
    ================================================================ */
-const API_HOST = "instagram360.p.rapidapi.com";
-
 const fetchRealProfile = async (handle, apiKey, tag) => {
-  const headers = {
-    "x-rapidapi-host": API_HOST,
-    "x-rapidapi-key":  apiKey,
-  };
-
-  /* 1. User info */
-  const fetchRealProfile = async (handle, apiKey, tag) => {
-  // Указываем адрес твоего локального сервера
   const BACKEND_URL = "http://localhost:5000";
 
   /* 1. Инфо о пользователе */
-  // Заменили прямой URL на твой локальный бэкенд
   const infoRes = await fetch(`${BACKEND_URL}/api/userinfo?username=${encodeURIComponent(handle)}`);
   
   if (!infoRes.ok) {
@@ -426,14 +416,13 @@ const fetchRealProfile = async (handle, apiKey, tag) => {
   let er         = 1.8;
 
   try {
-    // Здесь тоже заменили URL на локальный бэкенд
     const postsRes = await fetch(`${BACKEND_URL}/api/userposts?username=${encodeURIComponent(handle)}`);
     
     if (postsRes.ok) {
       const postsJson = await postsRes.json();
       const items = postsJson?.data?.items || [];
       if (items.length > 0) {
-        const typeMap = { 1: "Фото", 2: "Видео", 8: "Карусель" };
+        const typeMap = { 1: "Фото", 2: "Video", 8: "Карусель" };
         const iconMap = { 1: "🖼️",   2: "🎬",    8: "🗂️"     };
         realPosts = items.slice(0, 6).map((item, i) => ({
           id:       i,
@@ -864,7 +853,7 @@ const AddModal = ({ onClose, onAdd, onToast }) => {
       onToast(`✓ ${p.username} добавлен — данные получены из Instagram.`);
     } catch (e) {
       setBusy(false);
-      setErrMsg(e.message || "Ошибка загрузки. Проверьте username и API-ключ.");
+      setErrMsg(e.message || "Ошибка загрузки. Проверьте username и запуск Node-сервера.");
     }
   };
 
@@ -955,7 +944,6 @@ const Toast = ({ msg, onHide }) => {
    APP
    ================================================================ */
 const App = () => {
-  /* Init from localStorage — fall back to mocks only on first ever load */
   const [profiles,   setProfiles]   = React.useState(() => loadProfiles() ?? INIT_PROFILES);
   const [tf,         setTf]         = React.useState("1М");
   const [selDate,    setSelDate]    = React.useState("");
@@ -966,15 +954,12 @@ const App = () => {
   const [catFilter,  setCatFilter]  = React.useState("Все");
   const [hasKey,     setHasKey]     = React.useState(!!loadApiKey());
 
-  /* Persist whenever profiles change */
   React.useEffect(() => { saveProfiles(profiles); }, [profiles]);
 
-  /* Close detail if selected profile was deleted */
   React.useEffect(() => {
     if (selId && !profiles.find(p => p.id === selId)) setSelId(null);
   }, [profiles, selId]);
 
-  /* Refresh hasKey state when settings modal closes */
   const handleSetClose = () => {
     setShowSet(false);
     setHasKey(!!loadApiKey());
@@ -991,20 +976,17 @@ const App = () => {
 
   const showToast = React.useCallback(msg => setToast(msg), []);
 
-  /* Category tabs — derive unique tags from all profiles */
   const allTags = React.useMemo(
     () => ["Все", ...Array.from(new Set(profiles.map(p => p.tag).filter(Boolean)))],
     [profiles]
   );
 
-  /* Reset filter if tag no longer exists */
   React.useEffect(() => {
     if (catFilter !== "Все" && !allTags.includes(catFilter)) setCatFilter("Все");
   }, [allTags, catFilter]);
 
   const filtered = catFilter === "Все" ? profiles : profiles.filter(p => p.tag === catFilter);
 
-  /* Summary stats */
   const totalFollowers = profiles.reduce((a, p) => a + (p.followers || 0), 0);
   const avgER          = profiles.length
     ? (profiles.reduce((a, p) => a + Number(p.er || 0), 0) / profiles.length).toFixed(2)
@@ -1079,7 +1061,7 @@ const App = () => {
                   <span className="s-lbl">Источник данных</span>
                   <span className="s-val" style={{ fontSize: ".82rem", color: "var(--green)", display: "flex", alignItems: "center", gap: 5 }}>
                     <span style={{ width: 7, height: 7, background: "var(--green)", borderRadius: "50%", display: "inline-block" }} />
-                    RapidAPI Live
+                    Proxy Server Live
                   </span>
                 </div>
               </>
@@ -1092,7 +1074,6 @@ const App = () => {
       <main className="main">
         <div className="wrap">
 
-          {/* Top bar */}
           <div className="top-bar">
             <div className="sec-title">
               <span>◈</span>
@@ -1109,7 +1090,6 @@ const App = () => {
             </button>
           </div>
 
-          {/* Category filter tabs */}
           {allTags.length > 1 && (
             <div className="cat-tabs">
               {allTags.map(tag => (
@@ -1129,7 +1109,6 @@ const App = () => {
             </div>
           )}
 
-          {/* Detail panel */}
           {selProfile && (
             <Detail
               key={selProfile.id}
@@ -1140,7 +1119,6 @@ const App = () => {
             />
           )}
 
-          {/* Cards grid or empty state */}
           {filtered.length === 0 ? (
             <div className="empty">
               <div className="empty-ic">📊</div>
