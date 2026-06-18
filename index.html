@@ -391,7 +391,7 @@ const INIT_PROFILES = [
 /* ================================================================
    REAL API FETCH — instagram-scraper-api2 on RapidAPI
    ================================================================ */
-const API_HOST = "instagram-scraper-api2.p.rapidapi.com";
+const API_HOST = "instagram360.p.rapidapi.com";
 
 const fetchRealProfile = async (handle, apiKey, tag) => {
   const headers = {
@@ -401,7 +401,7 @@ const fetchRealProfile = async (handle, apiKey, tag) => {
 
   /* 1. User info */
   const infoRes = await fetch(
-    `https://${API_HOST}/v1/info?username_or_id_or_url=${encodeURIComponent(handle)}`,
+    `https://${API_HOST}/userinfo/?username_or_id_or_url=${encodeURIComponent(handle)}`,
     { method: "GET", headers }
   );
   if (!infoRes.ok) {
@@ -427,7 +427,7 @@ const fetchRealProfile = async (handle, apiKey, tag) => {
 
   try {
     const postsRes = await fetch(
-      `https://${API_HOST}/v1/posts?username_or_id_or_url=${encodeURIComponent(handle)}`,
+      `https://${API_HOST}/userposts/?username_or_id_or_url=${encodeURIComponent(handle)}``,
       { method: "GET", headers }
     );
     if (postsRes.ok) {
