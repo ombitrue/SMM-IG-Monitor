@@ -340,6 +340,14 @@ const genDailyMaster = (base, vol = 0.012, trend = 0.0015) => {
   return out;
 };
 
+// Типичная относительная "интенсивность" активности по часам суток —
+// используется, чтобы внутридневной график выглядел как реальные
+// данные (медленнее ночью, быстрее днём/вечером), а не прямая линия.
+const HOUR_ACTIVITY = [
+  0.3,0.2,0.15,0.1,0.1,0.15,0.3,0.5,0.7,0.85,0.9,1,
+  1,0.95,0.9,0.95,1,1,0.95,0.85,0.7,0.6,0.45,0.35,
+];
+
 const deriveTF = daily => {
   const n = daily.length;
   const today     = daily[n - 1];
@@ -348,18 +356,31 @@ const deriveTF = daily => {
   const week  = daily.slice(n - 7);
   const month = daily.slice(n - 30);
 
+  // ГОД: привязан к РЕАЛЬНЫМ календарным месяцам (та же логика, что
+  // и в makeDates), а не к фиксированным 30-дневным шагам — теперь
+  // подписи на графике и значения соответствуют друг другу.
+  const now = new Date();
   const year = [];
   for (let m = 11; m >= 0; m--) {
-    const idx = Math.max(0, n - 1 - m * 30);
+    const d = new Date(now);
+    d.setMonth(d.getMonth() - m);
+    const daysAgo = Math.max(0, Math.round((now - d) / 86400000));
+    const idx = Math.max(0, n - 1 - daysAgo);
     year.push(daily[idx]);
   }
   year[year.length - 1] = today;
 
+  // ДЕНЬ: следует кривой суточной активности вместо прямой линии,
+  // всё ещё точно заканчиваясь на сегодняшнем фактическом значении.
+  const totalDelta = today - yesterday;
+  const weightSum  = HOUR_ACTIVITY.reduce((a, b) => a + b, 0);
   const hours = [];
+  let cum = 0;
   for (let h = 0; h < 24; h++) {
-    const frac = h / 23;
-    let v = yesterday + (today - yesterday) * frac;
-    v *= 1 + (Math.random() - 0.5) * 0.006;
+    cum += HOUR_ACTIVITY[h];
+    const frac = cum / weightSum;
+    let v = yesterday + totalDelta * frac;
+    v *= 1 + (Math.random() - 0.5) * 0.004 * HOUR_ACTIVITY[h];
     hours.push(Math.round(Math.max(1, v)));
   }
   hours[23] = today;
