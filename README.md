@@ -14,7 +14,7 @@ A powerful, lightweight tool for tracking and analyzing Instagram profile activi
 
 ### 1. Clone the Repository
 ```bash
-git clone [https://github.com/YOUR_USERNAME/instagram-analytics.git](https://github.com/YOUR_USERNAME/instagram-analytics.git)
+git clone https://github.com/YOUR_USERNAME/instagram-analytics.git
 cd instagram-analytics
 ```
 2. Configure Environment
