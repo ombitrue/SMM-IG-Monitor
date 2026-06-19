@@ -40,6 +40,7 @@ Option 1: Using RapidAPI (Recommended)
 Sign up on RapidAPI.
 
 Subscribe to an Instagram API (e.g., instagram-statistics-api).
+https://rapidapi.com/artemlipko/api/instagram-statistics-api
 
 Copy your X-RapidAPI-Key and add it to your .env file.
 
