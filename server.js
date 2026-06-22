@@ -11,20 +11,22 @@
 //  ВСЯ конфигурация провайдера API задаётся через .env — см.
 //  README.md, раздел "Переменные окружения" и "Другие провайдеры".
 // ============================================================
-require('dotenv').config();
 const express = require('express');
 const axios   = require('axios');
+const { config, validate }    = require('./config');
+const { saveSnapshot }        = require('./db');
+const { rollupByDay, growth } = require('./stats');
 
 const app  = express();
-const PORT = process.env.PORT || 5050;
+const PORT = config.port;
 
 // ── Конфиг провайдера (полностью переопределяется через .env) ──
-const API_HOST    = process.env.RAPIDAPI_HOST       || "instagram-statistics-api.p.rapidapi.com";
-const ENDPOINT    = process.env.RAPIDAPI_ENDPOINT    || "/community";
-const PARAM_NAME  = process.env.RAPIDAPI_PARAM_NAME  || "url";   // имя query-параметра, который ждёт API
-const PARAM_MODE  = process.env.RAPIDAPI_PARAM_MODE  || "url";   // "url" → полная ссылка на профиль; "username" → голый юзернейм
-const AUTH_HEADER = process.env.RAPIDAPI_AUTH_HEADER || "X-RapidAPI-Key";   // на случай провайдера без RapidAPI
-const HOST_HEADER = process.env.RAPIDAPI_HOST_HEADER || "X-RapidAPI-Host";  // можно пусто, если провайдеру не нужен
+const API_HOST    = config.apiHost;
+const ENDPOINT    = config.endpoint;
+const PARAM_NAME  = config.paramName;   // имя query-параметра, который ждёт API
+const PARAM_MODE  = config.paramMode;   // "url" → полная ссылка на профиль; "username" → голый юзернейм
+const AUTH_HEADER = config.authHeader;   // на случай провайдера без RapidAPI
+const HOST_HEADER = config.hostHeader;  // можно пусто, если провайдеру не нужен
 
 const ENDPOINTS = { userInfo: ENDPOINT, userPosts: ENDPOINT };
 
@@ -63,6 +65,25 @@ app.use((req, _res, next) => {
   next();
 });
 
+// ── MOCK API fixture ─────────────────────────────────────────
+const mockCommunity = username => {
+  const clean = username.toLowerCase().replace(/^@/, '');
+  const known = { nasa: 96500000, cristiano: 630000000 };
+  const fallback = 10000 + [...clean].reduce((sum, ch) => sum + ch.charCodeAt(0), 0) * 1000;
+  const follower_count = known[clean] || fallback;
+  return {
+    data: {
+      community: {
+        username: clean,
+        follower_count,
+        avgLikes: Math.round(follower_count * 0.015),
+        avgComments: Math.round(follower_count * 0.0004),
+        engagementRate: 1.54,
+      },
+    },
+  };
+};
+
 // ── Утилита: запрос к провайдеру с подробным логом ──────────────
 const apiRequest = async (endpoint, params, apiKey, label) => {
   const url = `https://${API_HOST}${endpoint}`;
@@ -70,14 +91,21 @@ const apiRequest = async (endpoint, params, apiKey, label) => {
   if (HOST_HEADER) headers[HOST_HEADER] = API_HOST;
   if (AUTH_HEADER) headers[AUTH_HEADER] = apiKey;
 
-  const config = { method: 'GET', url, params, headers, timeout: 15000 };
+  const requestConfig = { method: 'GET', url, params, headers, timeout: 15000 };
 
   console.log(`\n  [API → ${label}]`);
   console.log(`  URL:    ${url}`);
   console.log(`  Params: ${JSON.stringify(params)}`);
 
+  if (config.mockApi) {
+    const raw = params[PARAM_NAME] || '';
+    const username = String(raw).split('/').filter(Boolean).pop() || String(raw).replace(/^@/, '') || 'mock';
+    console.log('  🧪 MOCK_API=true | возвращаю fixture');
+    return mockCommunity(username);
+  }
+
   try {
-    const response = await axios(config);
+    const response = await axios(requestConfig);
     console.log(`  ✅ HTTP ${response.status} | данные получены`);
     const preview = JSON.stringify(response.data).slice(0, 300);
     console.log(`  Preview: ${preview}${preview.length === 300 ? '...' : ''}`);
@@ -132,7 +160,7 @@ app.get('/', (_req, res) => {
 
 // ── GET /api/health ──────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  const key = req.headers['x-rapidapi-key'] || process.env.RAPIDAPI_KEY;
+  const key = req.headers['x-rapidapi-key'] || config.rapidApiKey;
   res.json({
     server: 'ok',
     port: PORT,
@@ -141,6 +169,7 @@ app.get('/api/health', (req, res) => {
     endpoint: ENDPOINT,
     param_name: PARAM_NAME,
     param_mode: PARAM_MODE,
+    mock_api: config.mockApi,
   });
 });
 
@@ -149,11 +178,27 @@ app.get('/api/userinfo', async (req, res) => {
   const { username } = req.query;
   if (!username) return res.status(400).json({ error: 'Параметр username обязателен.' });
 
-  const apiKey = req.headers['x-rapidapi-key'] || process.env.RAPIDAPI_KEY;
+  const apiKey = req.headers['x-rapidapi-key'] || config.rapidApiKey;
   if (!apiKey) return res.status(401).json({ error: 'API-ключ отсутствует. Передайте заголовок x-rapidapi-key.' });
 
   try {
     const data = await apiRequest(ENDPOINTS.userInfo, buildParams(username), apiKey, 'userInfo');
+
+    try {
+      const d = data?.data?.community || data?.community || data?.data || data;
+      saveSnapshot({
+        username,
+        followers:   d.follower_count  || d.followers   || d.usersCount   || 0,
+        avgLikes:    d.avgLikes        || d.avg_likes    || d.averageLikes || null,
+        avgComments: d.avgComments     || d.avg_comments                  || null,
+        er:          d.engagementRate  || d.qualityScore || d.communityER  || null,
+        raw: d,
+      });
+      console.log(`  💾 Снэпшот сохранён: @${username}`);
+    } catch (dbErr) {
+      console.error(`  ⚠️  Ошибка сохранения снэпшота: ${dbErr.message}`);
+    }
+
     res.json(data);
   } catch (err) {
     res.status(err.status || 500).json({
@@ -164,12 +209,36 @@ app.get('/api/userinfo', async (req, res) => {
   }
 });
 
+// ── GET /api/history?username=handle&days=30 ───────────────────
+app.get('/api/history', (req, res) => {
+  const { username, days = '30' } = req.query;
+  if (!username) return res.status(400).json({ error: 'Параметр username обязателен.' });
+
+  const d = Math.min(Math.max(Number(days) || 30, 1), 365);
+
+  try {
+    const rollup     = rollupByDay(username, d);
+    const growthData = growth(username, Math.min(d, 7));
+    res.json({
+      username: username.toLowerCase().replace(/^@/, ''),
+      days: d,
+      rollup,
+      growth: growthData,
+      data_points: rollup.length,
+      has_sufficient_data: !growthData.insufficient,
+    });
+  } catch (err) {
+    console.error(`  ❌ /api/history ошибка: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /api/userposts?username=handle ─────────────────────────
 app.get('/api/userposts', async (req, res) => {
   const { username } = req.query;
   if (!username) return res.status(400).json({ error: 'Параметр username обязателен.' });
 
-  const apiKey = req.headers['x-rapidapi-key'] || process.env.RAPIDAPI_KEY;
+  const apiKey = req.headers['x-rapidapi-key'] || config.rapidApiKey;
   if (!apiKey) return res.status(401).json({ error: 'API-ключ отсутствует.' });
 
   try {
@@ -187,7 +256,7 @@ app.get('/api/probe', async (req, res) => {
   const { username, key } = req.query;
   if (!username) return res.status(400).json({ error: 'Укажите ?username=...' });
 
-  const apiKey = key || req.headers['x-rapidapi-key'] || process.env.RAPIDAPI_KEY;
+  const apiKey = key || req.headers['x-rapidapi-key'] || config.rapidApiKey;
   if (!apiKey) return res.status(401).json({ error: 'Нужен API-ключ: ?key=... или заголовок x-rapidapi-key' });
 
   const url = profileUrl(username);
@@ -246,11 +315,12 @@ app.use((req, res) => {
   console.warn(`  ⚠️  Неизвестный маршрут: ${req.method} ${req.originalUrl}`);
   res.status(404).json({
     error: `Маршрут "${req.originalUrl}" не найден на прокси-сервере`,
-    available: ['GET /', 'GET /api/health', 'GET /api/userinfo', 'GET /api/userposts', 'GET /api/probe'],
+    available: ['GET /', 'GET /api/health', 'GET /api/userinfo', 'GET /api/history', 'GET /api/userposts', 'GET /api/probe'],
   });
 });
 
 // ── Запуск ──────────────────────────────────────────────────────
+validate();
 app.listen(PORT, '0.0.0.0', () => {
   console.log('\n╔══════════════════════════════════════════════════╗');
   console.log('║   📊 Instagram Analytics Monitor — Proxy Server  ║');
@@ -261,7 +331,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`  🔧 Параметр       : ${PARAM_NAME} (режим: ${PARAM_MODE})`);
   console.log(`\n  📋 Тест связи     : GET http://localhost:${PORT}/api/health`);
   console.log(`  🔍 Поиск эндпоинта: GET http://localhost:${PORT}/api/probe?username=nasa&key=ВАШ_КЛЮЧ`);
-  const envKey = process.env.RAPIDAPI_KEY;
+  const envKey = config.rapidApiKey;
   if (envKey) {
     console.log(`  🔑 .env ключ      : ${envKey.slice(0, 6)}...${envKey.slice(-4)} (${envKey.length} симв.)`);
   } else {
